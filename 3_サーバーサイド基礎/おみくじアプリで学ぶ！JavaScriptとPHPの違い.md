@@ -117,3 +117,6 @@ $result = $fortunes[array_rand($fortunes)]; // ランダムで選ぶ
 PHPがデータベースや処理結果を返す
 
 という分業構造。
+
+## 5. 成果物
+[おみくじアプリPHP](https://taiyo8911.cloudfree.jp/myapp/fortune/)
