@@ -20,7 +20,7 @@
 
 ---
 
-## 📚 カリキュラム構成（全5章）
+## 📚 カリキュラム構成（全6章）
 
 | 章 | テーマ | 学習内容 | 学習時間 |
 |---|---|---|---|
@@ -29,8 +29,9 @@
 | 第3章 | 追加機能（Create） | フォームからデータ保存 | 2時間 |
 | 第4章 | 編集機能（Update） | データの更新 | 2時間 |
 | 第5章 | 削除機能（Delete） | データの削除 | 1時間 |
+| 第6章 | ユーザー認証 | ログイン・ユーザー別タスク管理 | 3時間 |
 
-**合計学習時間：約9時間**
+**合計学習時間：約12時間**
 
 ---
 
@@ -92,22 +93,32 @@
 
 ### 1-3. データベース設計
 
-**今回作成するtasksテーブル（シンプル版）**
+**今回作成するテーブル**
 
 ```sql
-tasks テーブル
+-- usersテーブル（ユーザー情報）※Laravel Breezeが自動作成
+users
+├── id (主キー)
+├── name (名前)
+├── email (メールアドレス)
+├── password (パスワード)
+├── created_at (作成日時)
+└── updated_at (更新日時)
+
+-- tasksテーブル（タスク情報）
+tasks
 ├── id (主キー・自動採番)
+├── user_id (外部キー → users.id)
 ├── title (タスクのタイトル)
 ├── description (タスクの説明・任意)
 ├── created_at (作成日時・自動)
 └── updated_at (更新日時・自動)
 ```
 
-**削除した項目：**
+**削除した項目（次のステップで追加可能）：**
 - ~~due_date (期限)~~
 - ~~priority (優先度)~~
 - ~~completed (完了フラグ)~~
-- ~~user_id (ユーザー紐付け)~~
 
 ### 1-4. 環境構築
 
@@ -155,6 +166,8 @@ php artisan serve
 - コントローラーでデータ取得
 - ビューでデータ表示
 
+**💡 注意：この章ではまずシンプルな構造でタスクテーブルを作成します。第6章でユーザー認証を追加する際に、user_idカラムを追加します。**
+
 ### 2-2. データベースとモデルの作成
 
 #### ① モデルとマイグレーションを同時に作成
@@ -179,6 +192,7 @@ public function up(): void
         $table->string('title');              // タイトル
         $table->text('description')->nullable(); // 説明（任意）
         $table->timestamps();                 // created_at, updated_at
+        // 注：user_idは第6章で追加します
     });
 }
 ```
@@ -918,9 +932,359 @@ public function destroy(Task $task)
 
 ---
 
+## 第6章｜ユーザー認証の実装
+
+### 6-1. この章で学ぶこと
+
+- Laravel Breezeを使った認証機能の追加
+- ユーザーとタスクの紐付け
+- ログイン状態の管理
+- 認可（他のユーザーのタスクを編集できないようにする）
+
+### 6-2. Laravel Breezeのインストール
+
+#### ① Breezeのインストール
+
+```bash
+# Laravel Breezeをインストール
+composer require laravel/breeze --dev
+
+# Breezeの初期設定（Bladeを選択）
+php artisan breeze:install blade
+
+# フロントエンドアセットをビルド
+npm install && npm run build
+
+# マイグレーション実行（usersテーブルなどを作成）
+php artisan migrate
+```
+
+**💡 Laravel Breezeとは：**
+- Laravelの認証機能を簡単に追加できるパッケージ
+- ユーザー登録・ログイン・パスワードリセットなどの機能が含まれる
+
+#### ② 動作確認
+
+```bash
+php artisan serve
+```
+
+ブラウザで http://localhost:8000 にアクセスすると、右上に「Log in」と「Register」のリンクが表示されます。
+
+**🌐 Breezeが追加する機能：**
+- ユーザー登録画面 `/register`
+- ログイン画面 `/login`
+- ログアウト機能 `/logout`
+- パスワードリセット機能
+
+### 6-3. タスクとユーザーの紐付け
+
+#### ① マイグレーションファイルを作成
+
+```bash
+php artisan make:migration add_user_id_to_tasks_table
+```
+
+`database/migrations/xxxx_add_user_id_to_tasks_table.php`
+
+```php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::table('tasks', function (Blueprint $table) {
+            // user_idカラムを追加（外部キー制約付き）
+            $table->foreignId('user_id')->after('id')->constrained()->cascadeOnDelete();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::table('tasks', function (Blueprint $table) {
+            $table->dropForeign(['user_id']);
+            $table->dropColumn('user_id');
+        });
+    }
+};
+```
+
+**💡 外部キー制約：**
+- `foreignId('user_id')` → usersテーブルのidと紐付け
+- `constrained()` → 外部キー制約を設定
+- `cascadeOnDelete()` → ユーザーが削除されたら、そのユーザーのタスクも削除
+
+#### ② マイグレーション実行
+
+```bash
+php artisan migrate
+```
+
+**⚠️ 既存データがある場合のエラー対処：**
+もしエラーが出た場合は、データベースをリセットして再実行します：
+
+```bash
+php artisan migrate:fresh
+```
+
+### 6-4. モデルのリレーション設定
+
+#### ① Taskモデルの更新
+
+`app/Models/Task.php`
+
+```php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class Task extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'user_id',      // 追加
+        'title',
+        'description',
+    ];
+
+    /**
+     * このタスクを所有するユーザー
+     */
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+}
+```
+
+#### ② Userモデルの更新
+
+`app/Models/User.php`
+
+```php
+// 既存のコードの下に追加
+
+/**
+ * このユーザーが所有するタスク
+ */
+public function tasks()
+{
+    return $this->hasMany(Task::class);
+}
+```
+
+**💡 リレーションの意味：**
+- `belongsTo(User::class)` → タスクは1人のユーザーに属する
+- `hasMany(Task::class)` → ユーザーは複数のタスクを持つ
+
+### 6-5. コントローラーの更新（認証対応）
+
+#### ① TaskControllerを更新
+
+`app/Http/Controllers/TaskController.php`
+
+```php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Task;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+
+class TaskController extends Controller
+{
+    /**
+     * ログインしていないとアクセスできないようにする
+     */
+    public function __construct()
+    {
+        $this->middleware('auth');
+    }
+
+    /**
+     * タスク一覧を表示（ログインユーザーのタスクのみ）
+     */
+    public function index()
+    {
+        // ログイン中のユーザーのタスクのみ取得
+        $tasks = Auth::user()->tasks()->orderBy('created_at', 'desc')->get();
+
+        return view('tasks.index', compact('tasks'));
+    }
+
+    /**
+     * タスク作成画面を表示
+     */
+    public function create()
+    {
+        return view('tasks.create');
+    }
+
+    /**
+     * タスクを保存（ログインユーザーに紐付け）
+     */
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'title' => 'required|max:255',
+            'description' => 'nullable',
+        ]);
+
+        // ログイン中のユーザーのタスクとして保存
+        Auth::user()->tasks()->create($validated);
+
+        return redirect()->route('tasks.index')
+            ->with('success', 'タスクを作成しました！');
+    }
+
+    /**
+     * タスク編集画面を表示
+     */
+    public function edit(Task $task)
+    {
+        // 自分のタスク以外は編集できないようにする
+        if ($task->user_id !== Auth::id()) {
+            abort(403, 'このタスクを編集する権限がありません。');
+        }
+
+        return view('tasks.edit', compact('task'));
+    }
+
+    /**
+     * タスクを更新
+     */
+    public function update(Request $request, Task $task)
+    {
+        // 自分のタスク以外は更新できないようにする
+        if ($task->user_id !== Auth::id()) {
+            abort(403, 'このタスクを更新する権限がありません。');
+        }
+
+        $validated = $request->validate([
+            'title' => 'required|max:255',
+            'description' => 'nullable',
+        ]);
+
+        $task->update($validated);
+
+        return redirect()->route('tasks.index')
+            ->with('success', 'タスクを更新しました！');
+    }
+
+    /**
+     * タスクを削除
+     */
+    public function destroy(Task $task)
+    {
+        // 自分のタスク以外は削除できないようにする
+        if ($task->user_id !== Auth::id()) {
+            abort(403, 'このタスクを削除する権限がありません。');
+        }
+
+        $task->delete();
+
+        return redirect()->route('tasks.index')
+            ->with('success', 'タスクを削除しました！');
+    }
+}
+```
+
+**💡 重要な変更点：**
+- `$this->middleware('auth')` → ログインしていないとアクセスできない
+- `Auth::user()->tasks()` → ログイン中のユーザーのタスクのみ取得
+- `$task->user_id !== Auth::id()` → 他のユーザーのタスクを編集できないようにチェック
+
+### 6-6. レイアウトの更新（ログアウトボタン追加）
+
+`resources/views/layouts/app.blade.php` のheader部分を更新
+
+```blade
+<header>
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h1>📝 My TODO App</h1>
+        @auth
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <span style="font-size: 14px;">{{ Auth::user()->name }}さん</span>
+                <form method="POST" action="{{ route('logout') }}">
+                    @csrf
+                    <button type="submit" class="btn" style="background: #e2e8f0; color: #2d3748; padding: 5px 15px;">
+                        ログアウト
+                    </button>
+                </form>
+            </div>
+        @endauth
+    </div>
+</header>
+```
+
+### 6-7. 動作確認
+
+#### ① ユーザー登録
+
+1. http://localhost:8000/register にアクセス
+2. 名前、メールアドレス、パスワードを入力
+3. 登録完了後、自動的にログイン
+
+#### ② タスクの作成・確認
+
+1. タスクを作成
+2. ログアウト
+3. 別のユーザーでログイン
+4. 最初のユーザーのタスクは表示されないことを確認
+
+### 6-8. この章のまとめ
+
+**🌐 この章でのWeb通信：**
+
+**【ユーザー登録】**
+1. `/register` にアクセス **→ HTTPリクエスト（Web通信発生）**
+2. サーバーが登録フォームのHTMLを返す **→ HTTPレスポンス（Web通信発生）**
+3. フォームを送信 **→ HTTPリクエスト（Web通信発生）** `POST /register`
+4. サーバーがユーザーをデータベースに保存
+5. ログイン状態にしてリダイレクト **→ HTTPレスポンス（Web通信発生）**
+
+**【ログイン】**
+1. `/login` にアクセス **→ HTTPリクエスト（Web通信発生）**
+2. サーバーがログインフォームのHTMLを返す **→ HTTPレスポンス（Web通信発生）**
+3. メールアドレスとパスワードを送信 **→ HTTPリクエスト（Web通信発生）** `POST /login`
+4. サーバーが認証情報を確認
+5. 認証成功ならログイン状態にしてリダイレクト **→ HTTPレスポンス（Web通信発生）**
+
+**【ログアウト】**
+1. ログアウトボタンをクリック **→ HTTPリクエスト（Web通信発生）** `POST /logout`
+2. サーバーがログイン状態を解除
+3. ログイン画面にリダイレクト **→ HTTPレスポンス（Web通信発生）**
+
+**💡 認証の仕組み：**
+- ログイン後、サーバーはセッションにユーザー情報を保存
+- ブラウザはCookieでセッションIDを保持
+- 以降のリクエストでCookieを自動的に送信
+- サーバーはセッションIDからユーザーを識別
+
+**理解度チェック：**
+- [ ] Laravel Breezeで認証機能を追加できる
+- [ ] usersテーブルとtasksテーブルのリレーションを理解している
+- [ ] ログイン中のユーザーのデータのみ取得できる
+- [ ] 他のユーザーのデータを編集できないようにする方法を理解している
+- [ ] ログイン・ログアウトの仕組みを理解している
+
+---
+
 ## 🎯 全体のまとめ
 
-### 完成したCRUD機能
+### 完成した機能
+
+**CRUD機能**
 
 | 機能 | HTTPメソッド | URL | Controllerメソッド |
 |---|---|---|---|
@@ -930,6 +1294,16 @@ public function destroy(Task $task)
 | 編集画面 | GET | /tasks/{id}/edit | edit() |
 | 更新 | PUT | /tasks/{id} | update() |
 | 削除 | DELETE | /tasks/{id} | destroy() |
+
+**認証機能**
+
+| 機能 | HTTPメソッド | URL |
+|---|---|---|
+| ユーザー登録画面 | GET | /register |
+| ユーザー登録処理 | POST | /register |
+| ログイン画面 | GET | /login |
+| ログイン処理 | POST | /login |
+| ログアウト処理 | POST | /logout |
 
 ### Web通信が発生するタイミングのまとめ
 
@@ -949,10 +1323,11 @@ public function destroy(Task $task)
 
 **サーバー内部（Model ↔ Controller ↔ View）ではWeb通信は発生しません**
 
-### MVCの理解度チェック
+### 最終理解度チェック
 
 **以下の質問に答えられますか？**
 
+**MVCフレームワーク**
 - [ ] Model, View, Controllerそれぞれの役割は？
 - [ ] ブラウザでURLにアクセスしてから画面が表示されるまでの流れは？
 - [ ] どのタイミングでWeb通信が発生する？
@@ -960,38 +1335,67 @@ public function destroy(Task $task)
 - [ ] HTMLを生成するのはどの層？
 - [ ] ルーティングの役割は？
 
+**CRUD操作**
+- [ ] Create（作成）、Read（読み取り）、Update（更新）、Delete（削除）をすべて実装できる
+- [ ] GET、POST、PUT、DELETEメソッドの使い分けができる
+- [ ] バリデーションを実装できる
+
+**ユーザー認証**
+- [ ] Laravel Breezeで認証機能を追加できる
+- [ ] リレーション（belongsTo, hasMany）を理解している
+- [ ] ログイン中のユーザーのデータのみ取得できる
+- [ ] 他のユーザーのデータにアクセスできないようにする方法を理解している
+
 ---
 
 ## 🚀 次のステップ
 
-このシンプルなTODOアプリを理解できたら、次のステップに進みましょう：
+このTODOアプリを理解できたら、次のステップに進みましょう：
 
-### レベル1：機能追加
+### レベル1：基本機能の追加
 
 1. **完了フラグの追加**
    - tasksテーブルに `completed` カラムを追加
    - 完了/未完了を切り替える機能
+   - チェックボックスで完了状態を変更
 
 2. **期限の追加**
    - tasksテーブルに `due_date` カラムを追加
-   - 期限を表示
+   - 期限の表示と入力
+   - 期限切れの警告表示
 
 3. **優先度の追加**
    - tasksテーブルに `priority` カラムを追加
-   - 優先度で色分け
+   - 優先度で色分け表示
+   - 優先度での並び替え
 
-### レベル2：認証機能
+### レベル2：UX向上
 
-1. **Laravel Breezeで認証追加**
-   - ユーザー登録・ログイン機能
-   - ユーザーごとのタスク管理
+1. **検索・フィルター機能**
+   - タスク名での検索
+   - 完了/未完了でのフィルタリング
+   - 期限でのフィルタリング
+
+2. **カテゴリー・タグ機能**
+   - タスクをカテゴリー分け
+   - タグによる分類と検索
+
+3. **ソート機能**
+   - 作成日順、期限順、優先度順などで並び替え
 
 ### レベル3：高度な機能
 
-1. **検索・フィルター機能**
-2. **カテゴリー・タグ機能**
-3. **API開発**
-4. **テストコードの作成**
+1. **API開発**
+   - RESTful APIの作成
+   - モバイルアプリやSPAとの連携
+
+2. **テストコードの作成**
+   - 単体テスト（Unit Test）
+   - 機能テスト（Feature Test）
+
+3. **パフォーマンス改善**
+   - データベースクエリの最適化
+   - キャッシュの活用
 
 ---
 
@@ -1009,5 +1413,13 @@ public function destroy(Task $task)
 
 **🎉 お疲れ様でした！**
 
-MVCフレームワークの基本を理解し、シンプルなTODOアプリが完成しました。
+MVCフレームワークの基本を理解し、ユーザー認証付きのTODOアプリが完成しました。
+
+**このカリキュラムで学んだこと：**
+- MVCアーキテクチャの基礎
+- CRUD操作の実装（Create, Read, Update, Delete）
+- データベースとの連携（マイグレーション、モデル、リレーション）
+- ユーザー認証とセッション管理
+- Web通信の仕組み
+
 ここで学んだ基礎を土台に、より高度な機能を追加していきましょう！
