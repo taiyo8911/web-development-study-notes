@@ -270,8 +270,8 @@ Route::get('/greeting/{name}', function ($name) {
 
 **コントローラー = 処理をまとめる場所**
 
+#### コントローラーを作成
 ```bash
-# コントローラーを作成
 php artisan make:controller UserController
 ```
 
