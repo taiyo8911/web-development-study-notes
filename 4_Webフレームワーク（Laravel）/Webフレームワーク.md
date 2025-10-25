@@ -367,8 +367,8 @@ DB_CONNECTION=sqlite
 - インストール不要
 - 練習に最適
 
+#### データベースファイルを作成
 ```bash
-# データベースファイルを作成
 touch database/database.sqlite
 ```
 
@@ -376,8 +376,8 @@ touch database/database.sqlite
 
 **マイグレーション = データベースの設計図**
 
+#### tasksテーブルのマイグレーションを作成
 ```bash
-# tasksテーブルのマイグレーションを作成
 php artisan make:migration create_tasks_table
 ```
 
@@ -420,8 +420,8 @@ php artisan migrate
 
 **モデル = データベースとやり取りするクラス**
 
+#### Taskモデルを作成
 ```bash
-# Taskモデルを作成
 php artisan make:model Task
 ```
 
