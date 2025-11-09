@@ -1184,14 +1184,6 @@ use Illuminate\Support\Facades\Auth;
 class TaskController extends Controller
 {
     /**
-     * ログインしていないとアクセスできないようにする
-     */
-    public function __construct()
-    {
-        $this->middleware('auth');
-    }
-
-    /**
      * タスク一覧を表示（ログインユーザーのタスクのみ）
      */
     public function index()
