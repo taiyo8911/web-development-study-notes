@@ -155,6 +155,18 @@ php artisan serve
 
 **✅ http://localhost:8000 でLaravelの画面が表示されればOK！**
 
+**データベースのデータについて**
+
+今回使用するSQLiteはファイルベースのデータベースで、database/database.sqliteというファイルがデータベース本体です。
+```
+todo-app/
+├── database/
+│   └── database.sqlite  ← このファイルにデータが保存されている
+├── app/
+├── routes/
+└── ...
+```
+
 ---
 
 ## 第2章｜タスク一覧の実装（Read）
