@@ -1284,30 +1284,8 @@ class TaskController extends Controller
 - `Auth::user()->tasks()` → ログイン中のユーザーのタスクのみ取得
 - `$task->user_id !== Auth::id()` → 他のユーザーのタスクを編集できないようにチェック
 
-### 6-6. レイアウトの更新（ログアウトボタン追加）
 
-`resources/views/layouts/app.blade.php` のheader部分を更新
-
-```blade
-<header>
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-        <h1>📝 My TODO App</h1>
-        @auth
-            <div style="display: flex; align-items: center; gap: 15px;">
-                <span style="font-size: 14px;">{{ Auth::user()->name }}さん</span>
-                <form method="POST" action="{{ route('logout') }}">
-                    @csrf
-                    <button type="submit" class="btn" style="background: #e2e8f0; color: #2d3748; padding: 5px 15px;">
-                        ログアウト
-                    </button>
-                </form>
-            </div>
-        @endauth
-    </div>
-</header>
-```
-
-### 6-7. 動作確認
+### 6-6. 動作確認
 
 #### ① ユーザー登録
 
@@ -1322,7 +1300,7 @@ class TaskController extends Controller
 3. 別のユーザーでログイン
 4. 最初のユーザーのタスクは表示されないことを確認
 
-### 6-8. この章のまとめ
+### 6-7. この章のまとめ
 
 **🌐 この章でのWeb通信：**
 
