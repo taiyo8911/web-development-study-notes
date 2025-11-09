@@ -1272,7 +1272,6 @@ class TaskController extends Controller
 ```
 
 **💡 重要な変更点：**
-- `$this->middleware('auth')` → ログインしていないとアクセスできない
 - `Auth::user()->tasks()` → ログイン中のユーザーのタスクのみ取得
 - `$task->user_id !== Auth::id()` → 他のユーザーのタスクを編集できないようにチェック
 
