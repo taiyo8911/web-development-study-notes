@@ -1012,61 +1012,245 @@ public function destroy(Task $task)
 
 ---
 
-## 第6章｜ユーザー認証の実装
+# 第6章｜ユーザー認証機能の実装（新規プロジェクト）
 
-### 6-1. この章で学ぶこと
+**目標：Laravel Breezeで認証付きToDoアプリを最初から作る**
 
-- Laravel Breezeを使った認証機能の追加
-- ユーザーとタスクの紐付け
-- ログイン状態の管理
-- 認可（他のユーザーのタスクを編集できないようにする）
+---
 
-### 6-2. Laravel Breezeのインストール
+## 🗺️ この章の全体像
 
-#### ① Breezeのインストール
+| セクション | 内容 | 所要時間 |
+|---|---|---|
+| 6-1 | なぜ新しいプロジェクトで作るのか | 15分 |
+| 6-2 | プロジェクト作成とBreeze導入 | 30分 |
+| 6-3 | Breezeの構造を理解する | 30分 |
+| 6-4 | タスクテーブルの作成 | 30分 |
+| 6-5 | タスクのCRUD実装 | 2時間 |
+| 6-6 | 完成版の確認 | 30分 |
 
-```bash
-# Laravel Breezeをインストール
-composer require laravel/breeze --dev
+**合計学習時間：約4.5時間**
 
-# Breezeの初期設定（Bladeを選択）
-php artisan breeze:install blade
+---
 
-# フロントエンドアセットをビルド
-npm install && npm run build
+## 💡 6-1. なぜ新しいプロジェクトで作るのか？
 
-# マイグレーション実行（usersテーブルなどを作成）
-php artisan migrate
+### 第5章までと第6章の違い
+
+| 項目 | 第5章まで | 第6章（これから） |
+|---|---|---|
+| **プロジェクト** | `todo-app` | `todo-auth`（新規） |
+| **認証** | なし | あり（Laravel Breeze） |
+| **レイアウト** | 自作の`@extends` | Breezeの`<x-app-layout>` |
+| **スタイル** | 自作CSS | TailwindCSS |
+| **目的** | Laravel基礎理解 | 認証付き本格アプリ |
+
+### なぜ分けるのか？
+
+**理由1：レイアウトシステムが異なる**
+```blade
+<!-- 第5章までの方式 -->
+@extends('layouts.app')
+@section('content')
+    <h1>タスク一覧</h1>
+@endsection
+
+<!-- Breezeの方式（第6章） -->
+<x-app-layout>
+    <x-slot name="header">
+        <h2>タスク一覧</h2>
+    </x-slot>
+    <div class="py-12">
+        <!-- コンテンツ -->
+    </div>
+</x-app-layout>
 ```
 
-**💡 Laravel Breezeとは：**
-- Laravelの認証機能を簡単に追加できるパッケージ
-- ユーザー登録・ログイン・パスワードリセットなどの機能が含まれる
+**理由2：最初からBreezeを入れた方が簡単**
+- 後から追加すると既存コードとの調整が必要
+- 新規プロジェクトなら設定がクリーン
 
-#### ② 動作確認
+**理由3：実務でもよくあるパターン**
+- 練習用の簡易版 → 本番用の完成版という流れ
 
+---
+
+## 🚀 6-2. プロジェクト作成とBreeze導入
+
+### Step1: 新規プロジェクト作成
 ```bash
+# 作業ディレクトリに移動
+cd ~/Desktop
+
+# 新しいプロジェクト作成
+composer create-project laravel/laravel todo-auth
+
+# プロジェクトに移動
+cd todo-auth
+```
+
+### Step2: データベース設定
+
+`.env`ファイルを編集
+```env
+DB_CONNECTION=sqlite
+# 以下をコメントアウト
+# DB_HOST=127.0.0.1
+# DB_PORT=3306
+# DB_DATABASE=laravel
+# DB_USERNAME=root
+# DB_PASSWORD=
+```
+
+データベースファイルを作成
+```bash
+touch database/database.sqlite
+```
+
+### Step3: Laravel Breezeのインストール
+```bash
+# Breezeパッケージをインストール
+composer require laravel/breeze --dev
+
+# Breezeをセットアップ（Bladeテンプレートを選択）
+php artisan breeze:install blade
+
+# Node.jsの依存関係をインストール
+npm install
+
+# CSSとJavaScriptをビルド
+npm run dev
+```
+
+**別のターミナルを開いて**、`npm run dev`を実行し続ける（開発中はずっと起動）
+
+### Step4: マイグレーション実行
+
+最初のターミナルに戻って
+```bash
+# データベースにテーブルを作成
+php artisan migrate
+
+# サーバー起動
 php artisan serve
 ```
 
-ブラウザで http://localhost:8000 にアクセスすると、右上に「Log in」と「Register」のリンクが表示されます。
+### Step5: 動作確認
 
-**🌐 Breezeが追加する機能：**
-- ユーザー登録画面 `/register`
-- ログイン画面 `/login`
-- ログアウト機能 `/logout`
-- パスワードリセット機能
+ブラウザで以下にアクセス
 
-### 6-3. タスクとユーザーの紐付け
+1. `http://localhost:8000` → トップページ
+2. 右上の「Register」→ 新規ユーザー登録
+3. ログイン後、ダッシュボードが表示されればOK！
 
-#### ① マイグレーションファイルを作成
+---
 
-```bash
-php artisan make:migration add_user_id_to_tasks_table
+## 🔍 6-3. Breezeの構造を理解する
+
+### 自動生成されたファイル
+```
+todo-auth/
+├── app/
+│   └── Http/
+│       └── Controllers/
+│           └── Auth/               # 認証関連のコントローラー
+│               ├── LoginController.php
+│               └── RegisterController.php
+├── resources/
+│   └── views/
+│       ├── layouts/
+│       │   ├── app.blade.php       # メインレイアウト
+│       │   ├── guest.blade.php     # ログイン前のレイアウト
+│       │   └── navigation.blade.php # ナビゲーションバー
+│       ├── auth/
+│       │   ├── login.blade.php     # ログインページ
+│       │   └── register.blade.php  # 登録ページ
+│       └── dashboard.blade.php     # ダッシュボード
+└── routes/
+    └── auth.php                    # 認証関連のルート
 ```
 
-`database/migrations/xxxx_add_user_id_to_tasks_table.php`
+### レイアウトファイルの中身を見てみよう
 
+`resources/views/layouts/app.blade.php`（一部抜粋）
+```blade
+<!DOCTYPE html>
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+
+    <title>{{ config('app.name', 'Laravel') }}</title>
+
+    <!-- Scripts -->
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+</head>
+<body class="font-sans antialiased">
+    <div class="min-h-screen bg-gray-100">
+        @include('layouts.navigation')
+
+        <!-- Page Heading -->
+        @if (isset($header))
+            <header class="bg-white shadow">
+                <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+                    {{ $header }}
+                </div>
+            </header>
+        @endif
+
+        <!-- Page Content -->
+        <main>
+            {{ $slot }}
+        </main>
+    </div>
+</body>
+</html>
+```
+
+**重要なポイント：**
+- `{{ $header }}` → ページのヘッダー部分
+- `{{ $slot }}` → ページのメインコンテンツ
+- `@include('layouts.navigation')` → ナビゲーションバーを読み込み
+
+### ダッシュボードの中身を見てみよう
+
+`resources/views/dashboard.blade.php`
+```blade
+<x-app-layout>
+    <x-slot name="header">
+        <h2 class="font-semibold text-xl text-gray-800 leading-tight">
+            {{ __('Dashboard') }}
+        </h2>
+    </x-slot>
+
+    <div class="py-12">
+        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                <div class="p-6 text-gray-900">
+                    {{ __("You're logged in!") }}
+                </div>
+            </div>
+        </div>
+    </div>
+</x-app-layout>
+```
+
+**解説：**
+1. `<x-app-layout>` → `layouts/app.blade.php`を使う
+2. `<x-slot name="header">` → ヘッダー部分の内容
+3. `<div class="py-12">` → メインコンテンツ
+
+---
+
+## 🗄️ 6-4. タスクテーブルの作成
+
+### Step1: マイグレーション作成
+```bash
+php artisan make:migration create_tasks_table
+```
+
+`database/migrations/YYYY_MM_DD_HHMMSS_create_tasks_table.php`
 ```php
 <?php
 
@@ -1078,46 +1262,38 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('tasks', function (Blueprint $table) {
-            // user_idカラムを追加（外部キー制約付き）
-            $table->foreignId('user_id')->after('id')->constrained()->cascadeOnDelete();
+        Schema::create('tasks', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained()->onDelete('cascade');
+            $table->string('title');
+            $table->text('description')->nullable();
+            $table->boolean('completed')->default(false);
+            $table->timestamps();
         });
     }
 
     public function down(): void
     {
-        Schema::table('tasks', function (Blueprint $table) {
-            $table->dropForeign(['user_id']);
-            $table->dropColumn('user_id');
-        });
+        Schema::dropIfExists('tasks');
     }
 };
 ```
 
-**💡 外部キー制約：**
-- `foreignId('user_id')` → usersテーブルのidと紐付け
-- `constrained()` → 外部キー制約を設定
-- `cascadeOnDelete()` → ユーザーが削除されたら、そのユーザーのタスクも削除
-
-#### ② マイグレーション実行
-
+**重要：**
+- `user_id` → どのユーザーのタスクかを記録
+- `constrained()` → usersテーブルと紐付け
+- `onDelete('cascade')` → ユーザーが削除されたらタスクも削除
 ```bash
+# マイグレーション実行
 php artisan migrate
 ```
 
-**⚠️ 既存データがある場合のエラー対処：**
-もしエラーが出た場合は、データベースをリセットして再実行します：
-
+### Step2: Taskモデル作成
 ```bash
-php artisan migrate:fresh
+php artisan make:model Task
 ```
 
-### 6-4. モデルのリレーション設定
-
-#### ① Taskモデルの更新
-
 `app/Models/Task.php`
-
 ```php
 <?php
 
@@ -1131,14 +1307,17 @@ class Task extends Model
     use HasFactory;
 
     protected $fillable = [
-        'user_id',      // 追加
+        'user_id',
         'title',
         'description',
+        'completed'
     ];
 
-    /**
-     * このタスクを所有するユーザー
-     */
+    protected $casts = [
+        'completed' => 'boolean'
+    ];
+
+    // リレーション：このタスクの所有者
     public function user()
     {
         return $this->belongsTo(User::class);
@@ -1146,32 +1325,59 @@ class Task extends Model
 }
 ```
 
-#### ② Userモデルの更新
+### Step3: Userモデルにリレーション追加
 
-`app/Models/User.php`
-
+`app/Models/User.php`に追加
 ```php
 // 既存のコードの下に追加
-
-/**
- * このユーザーが所有するタスク
- */
 public function tasks()
 {
     return $this->hasMany(Task::class);
 }
 ```
 
-**💡 リレーションの意味：**
-- `belongsTo(User::class)` → タスクは1人のユーザーに属する
-- `hasMany(Task::class)` → ユーザーは複数のタスクを持つ
+---
 
-### 6-5. コントローラーの更新（認証対応）
+## 📝 6-5. タスクのCRUD実装
 
-#### ① TaskControllerを更新
+### Step1: TaskControllerを作成
+```bash
+php artisan make:controller TaskController --resource
+```
+
+### Step2: ルート設定
+
+`routes/web.php`
+```php
+<?php
+
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\TaskController;  // 追加
+use Illuminate\Support\Facades\Route;
+
+Route::get('/', function () {
+    return view('welcome');
+});
+
+Route::get('/dashboard', function () {
+    return view('dashboard');
+})->middleware(['auth', 'verified'])->name('dashboard');
+
+Route::middleware('auth')->group(function () {
+    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    
+    // タスク機能（ログイン必須）
+    Route::resource('tasks', TaskController::class);
+});
+
+require __DIR__.'/auth.php';
+```
+
+### Step3: TaskController実装
 
 `app/Http/Controllers/TaskController.php`
-
 ```php
 <?php
 
@@ -1179,153 +1385,443 @@ namespace App\Http\Controllers;
 
 use App\Models\Task;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 
 class TaskController extends Controller
 {
-    /**
-     * タスク一覧を表示（ログインユーザーのタスクのみ）
-     */
+    // 一覧表示
     public function index()
     {
-        // ログイン中のユーザーのタスクのみ取得
-        $tasks = Auth::user()->tasks()->orderBy('created_at', 'desc')->get();
-
+        $tasks = auth()->user()->tasks()
+            ->orderBy('completed')
+            ->orderBy('created_at', 'desc')
+            ->get();
+        
         return view('tasks.index', compact('tasks'));
     }
 
-    /**
-     * タスク作成画面を表示
-     */
+    // 作成フォーム表示
     public function create()
     {
         return view('tasks.create');
     }
 
-    /**
-     * タスクを保存（ログインユーザーに紐付け）
-     */
+    // 保存処理
     public function store(Request $request)
     {
         $validated = $request->validate([
             'title' => 'required|max:255',
-            'description' => 'nullable',
+            'description' => 'nullable|max:1000'
         ]);
 
-        // ログイン中のユーザーのタスクとして保存
-        Auth::user()->tasks()->create($validated);
+        auth()->user()->tasks()->create($validated);
 
         return redirect()->route('tasks.index')
-            ->with('success', 'タスクを作成しました！');
+            ->with('success', 'タスクを作成しました');
     }
 
-    /**
-     * タスク編集画面を表示
-     */
+    // 編集フォーム表示
     public function edit(Task $task)
     {
-        // 自分のタスク以外は編集できないようにする
-        if ($task->user_id !== Auth::id()) {
-            abort(403, 'このタスクを編集する権限がありません。');
+        // 自分のタスクかチェック
+        if ($task->user_id !== auth()->id()) {
+            abort(403);
         }
 
         return view('tasks.edit', compact('task'));
     }
 
-    /**
-     * タスクを更新
-     */
+    // 更新処理
     public function update(Request $request, Task $task)
     {
-        // 自分のタスク以外は更新できないようにする
-        if ($task->user_id !== Auth::id()) {
-            abort(403, 'このタスクを更新する権限がありません。');
+        // 自分のタスクかチェック
+        if ($task->user_id !== auth()->id()) {
+            abort(403);
         }
 
         $validated = $request->validate([
             'title' => 'required|max:255',
-            'description' => 'nullable',
+            'description' => 'nullable|max:1000',
+            'completed' => 'boolean'
         ]);
 
-        $task->update($validated);
+        $task->update([
+            'title' => $validated['title'],
+            'description' => $validated['description'],
+            'completed' => $request->has('completed')
+        ]);
 
         return redirect()->route('tasks.index')
-            ->with('success', 'タスクを更新しました！');
+            ->with('success', 'タスクを更新しました');
     }
 
-    /**
-     * タスクを削除
-     */
+    // 削除処理
     public function destroy(Task $task)
     {
-        // 自分のタスク以外は削除できないようにする
-        if ($task->user_id !== Auth::id()) {
-            abort(403, 'このタスクを削除する権限がありません。');
+        // 自分のタスクかチェック
+        if ($task->user_id !== auth()->id()) {
+            abort(403);
         }
 
         $task->delete();
 
         return redirect()->route('tasks.index')
-            ->with('success', 'タスクを削除しました！');
+            ->with('success', 'タスクを削除しました');
     }
 }
 ```
 
-**💡 重要な変更点：**
-- `Auth::user()->tasks()` → ログイン中のユーザーのタスクのみ取得
-- `$task->user_id !== Auth::id()` → 他のユーザーのタスクを編集できないようにチェック
+### Step4: ビューファイル作成
 
+#### タスク一覧ページ
+```bash
+mkdir resources/views/tasks
+```
 
-### 6-6. 動作確認
+`resources/views/tasks/index.blade.php`
+```blade
+<x-app-layout>
+    <x-slot name="header">
+        <div class="flex justify-between items-center">
+            <h2 class="font-semibold text-xl text-gray-800 leading-tight">
+                {{ __('My Tasks') }}
+            </h2>
+            <a href="{{ route('tasks.create') }}" 
+               class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                新規作成
+            </a>
+        </div>
+    </x-slot>
 
-#### ① ユーザー登録
+    <div class="py-12">
+        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+            <!-- 成功メッセージ -->
+            @if (session('success'))
+                <div class="mb-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
+                    {{ session('success') }}
+                </div>
+            @endif
 
-1. http://localhost:8000/register にアクセス
-2. 名前、メールアドレス、パスワードを入力
-3. 登録完了後、自動的にログイン
+            <!-- タスクがない場合 -->
+            @if ($tasks->isEmpty())
+                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                    <div class="p-6 text-gray-900 text-center">
+                        <p class="mb-4">まだタスクがありません</p>
+                        <a href="{{ route('tasks.create') }}" 
+                           class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                            最初のタスクを作成
+                        </a>
+                    </div>
+                </div>
+            @else
+                <!-- タスク一覧 -->
+                <div class="space-y-4">
+                    @foreach ($tasks as $task)
+                        <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg 
+                                    {{ $task->completed ? 'opacity-60' : '' }}">
+                            <div class="p-6">
+                                <div class="flex justify-between items-start">
+                                    <div class="flex-1">
+                                        <h3 class="text-lg font-semibold {{ $task->completed ? 'line-through' : '' }}">
+                                            {{ $task->title }}
+                                        </h3>
+                                        @if ($task->description)
+                                            <p class="mt-2 text-gray-600">{{ $task->description }}</p>
+                                        @endif
+                                        <p class="mt-2 text-sm text-gray-500">
+                                            作成日: {{ $task->created_at->format('Y/m/d H:i') }}
+                                        </p>
+                                    </div>
+                                    <div class="flex space-x-2">
+                                        <a href="{{ route('tasks.edit', $task) }}" 
+                                           class="bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded">
+                                            編集
+                                        </a>
+                                        <form action="{{ route('tasks.destroy', $task) }}" 
+                                              method="POST" 
+                                              onsubmit="return confirm('本当に削除しますか？');">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" 
+                                                    class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">
+                                                削除
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            @endif
+        </div>
+    </div>
+</x-app-layout>
+```
 
-#### ② タスクの作成・確認
+#### タスク作成ページ
 
-1. タスクを作成
-2. ログアウト
-3. 別のユーザーでログイン
-4. 最初のユーザーのタスクは表示されないことを確認
+`resources/views/tasks/create.blade.php`
+```blade
+<x-app-layout>
+    <x-slot name="header">
+        <h2 class="font-semibold text-xl text-gray-800 leading-tight">
+            {{ __('Create New Task') }}
+        </h2>
+    </x-slot>
 
-### 6-7. この章のまとめ
+    <div class="py-12">
+        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                <div class="p-6">
+                    <form action="{{ route('tasks.store') }}" method="POST">
+                        @csrf
 
-**🌐 この章でのWeb通信：**
+                        <!-- タイトル -->
+                        <div class="mb-4">
+                            <label for="title" class="block text-gray-700 font-bold mb-2">
+                                タイトル <span class="text-red-500">*</span>
+                            </label>
+                            <input type="text" 
+                                   name="title" 
+                                   id="title" 
+                                   value="{{ old('title') }}"
+                                   class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline @error('title') border-red-500 @enderror"
+                                   required>
+                            @error('title')
+                                <p class="text-red-500 text-xs italic mt-1">{{ $message }}</p>
+                            @enderror
+                        </div>
 
-**【ユーザー登録】**
-1. `/register` にアクセス **→ HTTPリクエスト（Web通信発生）**
-2. サーバーが登録フォームのHTMLを返す **→ HTTPレスポンス（Web通信発生）**
-3. フォームを送信 **→ HTTPリクエスト（Web通信発生）** `POST /register`
-4. サーバーがユーザーをデータベースに保存
-5. ログイン状態にしてリダイレクト **→ HTTPレスポンス（Web通信発生）**
+                        <!-- 説明 -->
+                        <div class="mb-6">
+                            <label for="description" class="block text-gray-700 font-bold mb-2">
+                                説明
+                            </label>
+                            <textarea name="description" 
+                                      id="description" 
+                                      rows="4"
+                                      class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline @error('description') border-red-500 @enderror">{{ old('description') }}</textarea>
+                            @error('description')
+                                <p class="text-red-500 text-xs italic mt-1">{{ $message }}</p>
+                            @enderror
+                        </div>
 
-**【ログイン】**
-1. `/login` にアクセス **→ HTTPリクエスト（Web通信発生）**
-2. サーバーがログインフォームのHTMLを返す **→ HTTPレスポンス（Web通信発生）**
-3. メールアドレスとパスワードを送信 **→ HTTPリクエスト（Web通信発生）** `POST /login`
-4. サーバーが認証情報を確認
-5. 認証成功ならログイン状態にしてリダイレクト **→ HTTPレスポンス（Web通信発生）**
+                        <!-- ボタン -->
+                        <div class="flex items-center justify-between">
+                            <button type="submit" 
+                                    class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+                                作成
+                            </button>
+                            <a href="{{ route('tasks.index') }}" 
+                               class="text-gray-600 hover:text-gray-800">
+                                キャンセル
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</x-app-layout>
+```
 
-**【ログアウト】**
-1. ログアウトボタンをクリック **→ HTTPリクエスト（Web通信発生）** `POST /logout`
-2. サーバーがログイン状態を解除
-3. ログイン画面にリダイレクト **→ HTTPレスポンス（Web通信発生）**
+#### タスク編集ページ
 
-**💡 認証の仕組み：**
-- ログイン後、サーバーはセッションにユーザー情報を保存
-- ブラウザはCookieでセッションIDを保持
-- 以降のリクエストでCookieを自動的に送信
-- サーバーはセッションIDからユーザーを識別
+`resources/views/tasks/edit.blade.php`
+```blade
+<x-app-layout>
+    <x-slot name="header">
+        <h2 class="font-semibold text-xl text-gray-800 leading-tight">
+            {{ __('Edit Task') }}
+        </h2>
+    </x-slot>
 
-**理解度チェック：**
-- [ ] Laravel Breezeで認証機能を追加できる
-- [ ] usersテーブルとtasksテーブルのリレーションを理解している
-- [ ] ログイン中のユーザーのデータのみ取得できる
-- [ ] 他のユーザーのデータを編集できないようにする方法を理解している
-- [ ] ログイン・ログアウトの仕組みを理解している
+    <div class="py-12">
+        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                <div class="p-6">
+                    <form action="{{ route('tasks.update', $task) }}" method="POST">
+                        @csrf
+                        @method('PUT')
+
+                        <!-- タイトル -->
+                        <div class="mb-4">
+                            <label for="title" class="block text-gray-700 font-bold mb-2">
+                                タイトル <span class="text-red-500">*</span>
+                            </label>
+                            <input type="text" 
+                                   name="title" 
+                                   id="title" 
+                                   value="{{ old('title', $task->title) }}"
+                                   class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline @error('title') border-red-500 @enderror"
+                                   required>
+                            @error('title')
+                                <p class="text-red-500 text-xs italic mt-1">{{ $message }}</p>
+                            @enderror
+                        </div>
+
+                        <!-- 説明 -->
+                        <div class="mb-4">
+                            <label for="description" class="block text-gray-700 font-bold mb-2">
+                                説明
+                            </label>
+                            <textarea name="description" 
+                                      id="description" 
+                                      rows="4"
+                                      class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline @error('description') border-red-500 @enderror">{{ old('description', $task->description) }}</textarea>
+                            @error('description')
+                                <p class="text-red-500 text-xs italic mt-1">{{ $message }}</p>
+                            @enderror
+                        </div>
+
+                        <!-- 完了チェックボックス -->
+                        <div class="mb-6">
+                            <label class="flex items-center">
+                                <input type="checkbox" 
+                                       name="completed" 
+                                       value="1"
+                                       {{ old('completed', $task->completed) ? 'checked' : '' }}
+                                       class="mr-2">
+                                <span class="text-gray-700">完了</span>
+                            </label>
+                        </div>
+
+                        <!-- ボタン -->
+                        <div class="flex items-center justify-between">
+                            <button type="submit" 
+                                    class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+                                更新
+                            </button>
+                            <a href="{{ route('tasks.index') }}" 
+                               class="text-gray-600 hover:text-gray-800">
+                                キャンセル
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</x-app-layout>
+```
+
+### Step5: ナビゲーションにタスクリンクを追加
+
+`resources/views/layouts/navigation.blade.php`の`<div class="hidden space-x-8 sm:-my-px sm:ml-10 sm:flex">`内に追加
+```blade
+<!-- Navigation Links -->
+<div class="hidden space-x-8 sm:-my-px sm:ml-10 sm:flex">
+    <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
+        {{ __('Dashboard') }}
+    </x-nav-link>
+    
+    <!-- タスクリンクを追加 -->
+    <x-nav-link :href="route('tasks.index')" :active="request()->routeIs('tasks.*')">
+        {{ __('Tasks') }}
+    </x-nav-link>
+</div>
+```
+
+---
+
+## ✅ 6-6. 完成版の確認
+
+### 動作確認の手順
+
+1. **サーバーが起動しているか確認**
+```bash
+   php artisan serve
+```
+   別ターミナルで
+```bash
+   npm run dev
+```
+
+2. **ブラウザでアクセス**
+   - `http://localhost:8000/tasks`
+
+3. **テストの流れ**
+   - [ ] ログインしていない状態で`/tasks`にアクセス → ログインページにリダイレクト
+   - [ ] ログイン後、ナビゲーションバーに「Tasks」が表示される
+   - [ ] 「新規作成」からタスクを作成できる
+   - [ ] タスク一覧が表示される
+   - [ ] タスクを編集できる
+   - [ ] 完了チェックをつけると見た目が変わる
+   - [ ] タスクを削除できる
+
+4. **複数ユーザーでテスト**
+   - 別のユーザーでログイン
+   - タスクが分離されていることを確認
+
+---
+
+## 🎯 この章のゴール確認
+
+- [ ] Laravel Breezeをインストールできた
+- [ ] ユーザー登録・ログインができる
+- [ ] ログインしたユーザーだけがタスクを操作できる
+- [ ] タスクのCRUD（作成・読取・更新・削除）ができる
+- [ ] ユーザーごとにタスクが分離されている
+- [ ] Breezeのレイアウト（`<x-app-layout>`）を使ってビューを作成できる
+
+---
+
+## 💡 重要ポイントのまとめ
+
+### 1. 認証の仕組み
+```php
+// ログイン中のユーザーを取得
+auth()->user()
+
+// ログイン中のユーザーのID
+auth()->id()
+
+// ログイン中のユーザーのタスクだけを取得
+auth()->user()->tasks()
+```
+
+### 2. ミドルウェアで保護
+```php
+// routes/web.php
+Route::middleware('auth')->group(function () {
+    // この中のルートはログイン必須
+    Route::resource('tasks', TaskController::class);
+});
+```
+
+### 3. 自分のデータかチェック
+```php
+// TaskController.php
+if ($task->user_id !== auth()->id()) {
+    abort(403);  // 403 Forbidden
+}
+```
+
+### 4. Breezeのレイアウト
+```blade
+<x-app-layout>
+    <x-slot name="header">
+        <!-- ページタイトル -->
+    </x-slot>
+
+    <div class="py-12">
+        <!-- メインコンテンツ -->
+    </div>
+</x-app-layout>
+```
+
+---
+
+## 🚀 次のステップへ
+
+お疲れさまでした！認証付きのToDoアプリが完成しました。
+
+**この章で習得したこと：**
+- Laravel Breezeの導入
+- ユーザー認証の実装
+- ログインユーザーごとのデータ管理
+- TailwindCSSを使ったスタイリング
+- セキュリティの基本（他人のデータにアクセスさせない）
 
 ---
 
@@ -1397,56 +1893,6 @@ class TaskController extends Controller
 
 ---
 
-## 🚀 次のステップ
-
-このTODOアプリを理解できたら、次のステップに進みましょう：
-
-### レベル1：基本機能の追加
-
-1. **完了フラグの追加**
-   - tasksテーブルに `completed` カラムを追加
-   - 完了/未完了を切り替える機能
-   - チェックボックスで完了状態を変更
-
-2. **期限の追加**
-   - tasksテーブルに `due_date` カラムを追加
-   - 期限の表示と入力
-   - 期限切れの警告表示
-
-3. **優先度の追加**
-   - tasksテーブルに `priority` カラムを追加
-   - 優先度で色分け表示
-   - 優先度での並び替え
-
-### レベル2：UX向上
-
-1. **検索・フィルター機能**
-   - タスク名での検索
-   - 完了/未完了でのフィルタリング
-   - 期限でのフィルタリング
-
-2. **カテゴリー・タグ機能**
-   - タスクをカテゴリー分け
-   - タグによる分類と検索
-
-3. **ソート機能**
-   - 作成日順、期限順、優先度順などで並び替え
-
-### レベル3：高度な機能
-
-1. **API開発**
-   - RESTful APIの作成
-   - モバイルアプリやSPAとの連携
-
-2. **テストコードの作成**
-   - 単体テスト（Unit Test）
-   - 機能テスト（Feature Test）
-
-3. **パフォーマンス改善**
-   - データベースクエリの最適化
-   - キャッシュの活用
-
----
 
 ## 📚 参考資料
 
